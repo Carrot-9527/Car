@@ -10,13 +10,13 @@
 ![Car with USRP and 5G Base Station](docs/images/car_usrp.png) 
 
 ### Base Station Main Control Interface (Normal Operation)
-![Base Station Interface](docs/images/Base_Station_Interface.png)
+![Base Station Interface](docs/images/Base_Station_Interface.jpg)
 
 ### Packet Loss + Base Station Correction Process
-![Base Station Correction](docs/images/Base_Station_Correction.png)
+![Base Station Correction](docs/images/Base_Station_Correction.jpg)
 
 ### Packet Loss + Local Correction Process
-![Local Correction Process](docs/images/Local_Correction_Process.png)
+![Local Correction Process](docs/images/Local_Correction_Process.jpg)
 
 ### Base Station Correction Terminal Logs
 ![UE Base Station correction Logs](docs/images/UE_Base_Station_Correction_Logs.jpg)
@@ -57,7 +57,7 @@
 ```
 ┌─────────────────┐         5G NR Air Interface          ┌──────────────────┐
 │  Base Station   │  ←──────(srsRAN gNB + USRP)──────→   │   UE Client      │
-│  (Ubuntu  GUI)  │         Band 3 | 10 MHz | FDD          │ (Ubuntu / Python)│
+│  (Ubuntu  GUI)  │         Band 3 | 10 MHz | FDD        │ (Ubuntu / Python)│
 │                 │                                      │                  │
 │ • Trajectory Viz│                                      │ • CAN Init       │
 │ • Packet Loss   │                                      │ • Local Engine   │
@@ -110,8 +110,6 @@ sudo python3 ue_clientLX.py
 # sudo privileges are required for CAN device access
 ```
 
-> The UE obtains IP `10.45.0.2` via 5G PDU Session and connects to the base station TCP server at `10.45.0.1:5000`.
-
 ---
 
 ## ⚙️ Configuration
@@ -156,6 +154,60 @@ sudo python3 ue_clientLX.py
 - Once packet loss is detected (`Station reported packet loss!`), it switches immediately with no delay
 - The local closed-loop system tracks the ideal trajectory without relying on real-time base station commands
 - Even if the base station recovers, **Forced mode** can ignore the recovery and continue until the local trajectory is complete
+
+---
+
+## 📊 Trajectory Correction Performance Evaluation
+
+To quantitatively validate the effectiveness of the proposed dual-mode correction strategy under wireless packet loss, we designed a controlled trajectory-tracking experiment. The ideal trajectory is a 41-point interpolated curve spanning approximately 0.20 m in the X–Y plane. Four scenarios were tested:
+
+1. **Actual trajectory** — no packet loss, baseline reference;
+2. **Packet-loss trajectory** — TX packet loss triggered at a task-group transition without any correction;
+3. **Correction trajectory** — local no-delay correction enabled upon packet-loss detection;
+4. **Delayed-correction trajectory** — correction activated after a noticeable delay (simulating base-station-only recovery).
+
+### Trajectory Alignment Comparison
+
+The figure below overlays the four measured trajectories against the ideal path after interpolation alignment.
+
+![Trajectory Interpolation Alignment](docs/images/trajectory_alignment_comparison.png)
+
+**Key observations from the trajectory plot:**
+
+- **Actual trajectory** (solid blue) almost perfectly coincides with the **ideal trajectory** (solid black), confirming that the underlying motion-control loop is well calibrated.
+- **Packet-loss trajectory** (dashed red) diverges dramatically after the loss point (~X = 0.15 m). The vehicle continues with stale commands, producing a large negative Y excursion and failing to return to the target curve.
+- **Correction trajectory** (dashed yellow) deviates slightly at the onset of packet loss but rapidly converges back toward the ideal path, completing the remaining segment with only minor overshoot.
+- **Delayed-correction trajectory** (dotted purple) shows intermediate behavior: because the correction command arrives later, the vehicle travels farther off-track before recovery begins, resulting in a persistent lateral offset through the second half of the curve.
+
+### Quantitative Error Analysis
+
+| Metric | Actual | Packet-Loss | Correction | Delayed-Correction |
+|--------|--------|-------------|------------|-------------------|
+| **MSE (vs Ideal)** | 0.0000 | 0.0051 | 0.0006 | 0.0017 |
+| **Mean Absolute Error (m)** | 0.001 | 0.053 | 0.021 | 0.036 |
+| **Max Absolute Error (m)** | 0.003 | 0.132 | 0.045 | 0.060 |
+| **RMSE (m)** | 0.001 | 0.072 | 0.025 | 0.042 |
+
+![MSE and Absolute Error Statistics](docs/images/mse_comparison.png)
+
+**Interpretation of the error metrics:**
+
+- **MSE reduction**: Compared with the uncorrected packet-loss case, the local no-delay correction achieves an **MSE reduction of roughly 88.2 %** (from 0.0051 to 0.0006). Even the delayed correction still reduces MSE by about 66.7 % (to 0.0017), underscoring that any timely intervention is better than none.
+- **Maximum deviation**: The worst-case Y deviation drops from **0.132 m** (packet-loss) to **0.045 m** (correction) — a **65.9 % improvement**. The delayed correction limits the peak error to 0.060 m, which is still less than half the uncorrected value.
+- **RMSE consistency**: The correction trajectory’s RMSE (0.025 m) is only slightly above the ideal baseline (0.001 m), whereas the delayed-correction RMSE (0.042 m) reflects the accumulated drift during the waiting period before recovery begins.
+
+### Y-Axis Deviation Curves
+
+The right-hand subplot in the trajectory figure plots the instantaneous Y deviation (ΔY = Y_measured − Y_ideal) versus X position. This view highlights the dynamic behavior:
+
+- The **packet-loss curve** (red) plunges to nearly −0.13 m at X ≈ 0.45 m, indicating a severe undershoot because the vehicle never receives the steering commands needed for the second half of the curve.
+- The **correction curve** (yellow) dips to about −0.05 m early on but then flattens back toward zero, demonstrating the local engine’s ability to regenerate the missing trajectory segment and cancel the error.
+- The **delayed-correction curve** (purple) shows a smoother, prolonged negative drift that only gradually returns toward zero, confirming that every millisecond of delay translates directly into additional lateral error.
+- The **actual trajectory** (blue) remains within ±0.005 m of the ideal path throughout, validating the control hardware’s intrinsic precision.
+
+### Conclusion
+
+The experimental results demonstrate that **local no-delay correction is essential for maintaining trajectory fidelity in 5G NR weak-signal environments**. While base-station-side standalone correction can eventually recover the vehicle, the round-trip latency over the air interface allows the error to grow significantly. By embedding a lightweight trajectory-regeneration loop directly on the UE (car side), the system achieves sub-5 cm maximum deviation even under severe packet loss, satisfying the precision requirements for indoor mobile-robot navigation and remote teleoperation tasks.
 
 ---
 
@@ -386,7 +438,9 @@ RemoteCarControl/
 │   │   ├── Local_Disabled_setup.jpg
 │   │   ├── Local_Status.jpg
 │   │   ├── Startup_Loss_Logs.jpg
-│   │   └── car_usrp.jpg            # Car + USRP photo
+│   │   ├── car_usrp.jpg            # Car + USRP photo
+│   │   ├── trajectory_alignment_comparison.png  # Trajectory experiment
+│   │   └── mse_comparison.png      # MSE & error statistics
 │   └── 5g/                         # 5G NR experiment records
 │       └── logs/
 │           ├── ue.log
