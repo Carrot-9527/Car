@@ -1,43 +1,23 @@
-# 🚗 Remote Car Control System — Network Packet Loss Compensation & Trajectory Correction
+[README.md](https://github.com/user-attachments/files/29403961/README.md)
+# 🚗 Remote Car Control System over 5G NR
 
-A TCP-based remote car control platform featuring **packet loss simulation**, **base station correction**, and **local no-delay correction** to ensure trajectory tracking accuracy in weak network environments.
+> A TCP-based remote car control platform featuring **5G NR wireless communication** (srsRAN), **packet loss simulation**, **base station correction**, and **local correction** to ensure trajectory tracking accuracy in weak network environments.
 
 ---
 
-## 📸 Project Screenshots
+## 📸 Project Overview
 
-### Base Station Main Control Interface (Normal Operation)
-![Base Station Interface](docs/images/Base_Station_Interface.png)
+### System in Real World
+| Car + USRP B210 | 5G gNB / Core Network |
 
-### Packet Loss + Base Station Correction Process
-![Base Station Correction](docs/images/Base_Station_Correction.png)
-
-### Packet Loss + Local Correction Process
-![Local Correction Process](docs/images/Local_Correction_Process.png)
-
-### Base Station Correction Terminal Logs
-![UE Base Station correction Logs](docs/images/UE_Base_Station_Correction_Logs.jpg)
-
-### Local Correction Runtime Logs
-![UE Local Correction Logs](docs/images/UE_Local_Correction_Logs.jpg)
-
-### Local Correction Configuration Interface
-![Local Correction Setup](docs/images/Local_Correction_Setup.jpg)
-
-### Local Correction Disabled (Initial Setup)
-![Local Disabled](docs/images/Local_Disabled_setup.jpg)
-
-### Local Correction Status & Parameters
-![Local Status](docs/images/Local_Status.jpg)
-
-### Logs After Packet Loss at Startup
-![Startup Loss Logs](docs/images/Startup_Loss_Logs.jpg)
+| ![Car with USRP and 5G Base Station](docs/images/car_usrp.jpg) |
 
 ---
 
 ## ✨ Key Features
 
 - **🌐 TCP Remote Control**: Base station (Ubuntu GUI) communicates in real-time with the UE client (Ubuntu) via TCP
+- **📡 5G NR Wireless Link**: The car-side UE connects to the base station through an open-source 5G NR protocol stack ([srsRAN](https://docs.srsran.com/projects/project/en/latest/tutorials/source/srsUE/source/index.html)) and USRP hardware
 - **📉 Packet Loss Simulation**: Customizable TX/RX packet loss rates for testing in weak network environments
 - **🎯 Dual-Mode Correction**:
   - **Standalone Correction (Base Station)**: The base station calculates compensation speeds and sends them to the UE
@@ -51,27 +31,30 @@ A TCP-based remote car control platform featuring **packet loss simulation**, **
 ## 🏗️ System Architecture
 
 ```
-┌─────────────────┐                      ┌──────────────────┐
-│  Base Station   │  ←──── TCP ────→     │   UE Client      │
-│  (Ubuntu  GUI)  │   10.45.0.1:5000     │ (Ubuntu / Python)│
-│                 │                      │                  │
-│ • Trajectory Viz│                      │ • CAN Init       │
-│ • Packet Loss   │                      │ • Local Engine   │
-│   Simulator     │                      │ • Forced Mode    │
-│ • Speed Queue   │                      │ • Downsample     │
-│ • Correction    │                      │   Tracking       │
-│   Algorithm     │                      │                  │
-└─────────────────┘                      └──────────────────┘
-                                                │
-                                         ┌──────┴──────┐
-                                         │   CAN Bus   │
-                                         │ Channel 0/1 │
-                                         └──────┬──────┘
-                                                │
-                                          ┌─────┴─────┐
-                                          │Car Chassis│
-                                          │(Motor/Enc)│
-                                          └───────────┘
+┌─────────────────┐         5G NR Air Interface          ┌──────────────────┐
+│  Base Station   │  ←──────(srsRAN gNB + USRP)──────→   │   UE Client      │
+│  (Ubuntu  GUI)  │         Band 3 | 10 MHz | FDD          │ (Ubuntu / Python)│
+│                 │                                      │                  │
+│ • Trajectory Viz│                                      │ • CAN Init       │
+│ • Packet Loss   │                                      │ • Local Engine   │
+│   Simulator     │                                      │ • Forced Mode    │
+│ • Speed Queue   │                                      │ • Downsample     │
+│ • Correction    │                                      │   Tracking       │
+│   Algorithm     │                                      │                  │
+└─────────────────┘                                      └──────────────────┘
+         │                                                        │
+         │ TCP 10.45.0.1:5000 (over 5G TUN)                       │
+         └────────────────────────────────────────────────────────┘
+                                                                  │
+                                                           ┌──────┴──────┐
+                                                           │   CAN Bus   │
+                                                           │ Channel 0/1 │
+                                                           └──────┬──────┘
+                                                                  │
+                                                            ┌─────┴─────┐
+                                                            │Car Chassis│
+                                                            │(Motor/Enc)│
+                                                            └───────────┘
 ```
 
 ---
@@ -80,19 +63,30 @@ A TCP-based remote car control platform featuring **packet loss simulation**, **
 
 ### Launch
 
-**Step 1: Start the Base Station (Server)**
+**Step 1: Start the 5G gNB & Core Network**
+```bash
+# Start Open5GS core network (AMF/SMF/UPF)
+sudo systemctl start open5gs-*
+
+# Start srsRAN gNB with USRP X300
+sudo srsran_gnb -c gnb_config.yml
+```
+
+**Step 2: Start the Base Station (Server)**
 ```bash
 cd carBS
 python3 station_server.py
 # The GUI will automatically listen on 0.0.0.0:5000
 ```
 
-**Step 2: Start the UE Client**
+**Step 3: Start the UE Client (Car Side)**
 ```bash
 cd carUE
 sudo python3 ue_clientLX.py
 # sudo privileges are required for CAN device access
 ```
+
+> The UE obtains IP `10.45.0.2` via 5G PDU Session and connects to the base station TCP server at `10.45.0.1:5000`.
 
 ---
 
@@ -141,6 +135,63 @@ sudo python3 ue_clientLX.py
 
 ---
 
+## 🗼 5G NR Wireless Communication Experiment
+
+### Overview
+This project uses the open-source **srsRAN** 5G NR protocol stack to establish the wireless link between the base station and the car-mounted UE. The UE side is equipped with a **USRP B210/X300** for RF transmission and reception.
+
+- **Protocol Stack Reference**: [srsRAN Project — srsUE Source](https://docs.srsran.com/projects/project/en/latest/tutorials/source/srsUE/source/index.html)
+- **gNB Hardware**: USRP X300 (192.168.10.2), master clock 184.32 MHz
+- **UE Hardware**: USRP B210 (or X300)
+- **Core Network**: Open5GS AMF (10.129.143.11:38412)
+
+### Key Experiment Parameters
+
+| Parameter | Value |
+|-----------|-------|
+| Band | 3 |
+| DL ARFCN | 368500 |
+| DL Frequency | 1842.50 MHz |
+| UL Frequency | 1747.50 MHz |
+| Channel Bandwidth | 10 MHz |
+| SCS | 15 kHz |
+| SSB Periodicity | 10 ms |
+| PCI | 1 |
+| PLMN | 00101 |
+| TAC | 7 |
+| UE IMSI | 001010123456780 |
+| UE IP | 10.45.0.2 |
+| C-RNTI | 0x4601 |
+| Security | NEA0 (null encryption), 128-NIA2 (integrity) |
+
+### Key Logs & Analysis
+
+| File | Description | Size |
+|------|-------------|------|
+| [docs/5g/logs/ue.log](docs/5g/logs/ue.log) | UE side log: cell search, RRC setup, NAS authentication, PDU session establishment | ~120 KB |
+| [docs/5g/logs/gnb.log](docs/5g/logs/gnb.log) | gNB side log: PRACH detection, scheduler metrics, F1/E1AP setup, UE context management | ~340 KB |
+
+#### UE Log Key Events
+- `09:05:38` — Cell Search: PCI=1, SNR=+14.7 dB, CFO=-61.7 Hz
+- `09:05:38` — SIB1 acquired, CellID=4095
+- `09:05:38` — PRACH transmitted, preamble=0, TA=6 (16.1 μs)
+- `09:05:38` — RRC Setup Complete, C-RNTI=0x4601
+- `09:05:38` — NAS Authentication Request/Response successful
+- `09:05:38` — Security Mode Complete (NEA0, 128-NIA2)
+- `09:05:38` — PDU Session Establishment successful, IP=10.45.0.2
+- `09:05:38` — DRB1 established, UE enters Connected state
+
+#### gNB Log Key Events
+- `17:04:07` — gNB started, CU-CP/CU-UP/DU initialized
+- `17:04:07` — N2 interface connected to AMF (10.129.143.11:38412)
+- `17:04:07` — F1 Setup between CU-CP and DU completed
+- `17:05:15` — PRACH detected: preamble=0, TA=3.12 μs, RSSI=+4.8 dB
+- `17:05:15` — UE created: rnti=0x4601, SRB1/DRB1 configured
+- `17:05:15` — Initial Context Setup complete, PDU session configured
+- `17:05:16` — UE Reconfiguration complete, DRB1 active
+
+---
+
 ## 📝 Key Log Interpretation
 
 ### Base Station Logs
@@ -165,125 +216,39 @@ sudo python3 ue_clientLX.py
 
 ---
 
-## Packet Loss Simulation Mechanism
+## 📁 Project Structure
 
-### Overview
-
-The `PacketLossSimulator` is a flexible channel degradation simulator designed to emulate packet loss scenarios in communication systems. It supports multiple loss modes ranging from simple probabilistic dropping to intelligent task-group-based loss, enabling systematic testing of error recovery and correction strategies.
-
-### Core Concepts
-
-#### 1. Basic Loss Mode
-At its foundation, the simulator operates on a configurable probability basis:
-
-- **Loss Probability**: A value between `0.0` and `1.0` that determines the likelihood of dropping a packet.
-- **Direction Control**: Three directional modes are supported:
-  - `DIRECTION_TX_ONLY` — drops only outgoing (transmit) packets.
-  - `DIRECTION_RX_ONLY` — drops only incoming (receive) packets.
-  - `DIRECTION_BOTH` — drops packets in both directions.
-
-In this mode, each packet is evaluated independently using a random draw against the configured probability.
-
-#### 2. Queue Task Loss Mode
-For systems that operate on sequential command queues (e.g., robot motion control), the simulator provides an intelligent **queue loss mode** that operates on **task groups** rather than individual packets.
-
-**Task Group Analysis**: The simulator analyzes a speed command queue and automatically segments it into logical task groups based on velocity changes. A new task group is created when the speed in any direction changes by more than a threshold (absolute delta > 50 or relative change > 20%). Each group is characterized by:
-- A unique `group_id`
-- A descriptive label (e.g., "Forward 100mm/s + Left 50mm/s")
-- Command index range and duration
-- Dominant velocity components
-
-**Loss at Transitions**: When queue loss mode is enabled, packet loss is evaluated **only at task group transitions** (i.e., when the system is about to switch from one motion task to another). This models realistic scenarios where channel degradation causes an entire upcoming maneuver to be lost, not just sporadic individual commands.
-
-#### 3. Targeted Loss Mode
-For reproducible testing, the simulator supports **targeted loss mode**, allowing you to specify exactly which task groups should be dropped:
-
-- Provide a list of `task_group_ids` to mark as loss targets.
-- Configure a dedicated `target_loss_probability` for these groups (independent of the base probability).
-- Useful for regression testing specific failure scenarios.
-
-#### 4. Manual Trigger Mode
-In addition to automated probabilistic loss, the simulator supports **manual triggering**:
-
-- Call `trigger_manual_loss_for_task_group(group_id)` to force the loss of a specific upcoming task group.
-- The manual trigger takes **highest priority** over random and targeted modes.
-- After firing, the trigger resets automatically.
-
-#### 5. Correction & Recovery Integration
-When a task group loss is detected at a transition point, the simulator can interact with the host system via an optional GUI callback:
-
-- **User Decision**: A dialog prompts whether to start the correction routine immediately or continue with the current task group.
-- **Early Correction Flag**: If the user chooses to correct immediately, `correction_started_early` is set to `True` and `queue_ended_by_loss` is set to `True`, signaling the main controller to abort the remaining queue and initiate recovery using the last known valid command.
-- **Last Command Retention**: The simulator tracks the last successfully transmitted command (`last_command_data`) to serve as the baseline for recovery maneuvers.
-
-#### 6. Loss History & Statistics
-All loss events are recorded in a structured history log, including:
-
-- Timestamp
-- Task group ID and description
-- Number of lost commands and total duration
-- Loss reason and mode (`manual`, `target`, or `random`)
-- Statistical aggregates: total packets, loss rates, average loss size, early correction flags
-
-Statistics can be retrieved programmatically via `get_stats()` or as a formatted text summary via `get_stats_text()`.
-
-### Usage Example
-
-```python
-from packet_loss_simulator import PacketLossSimulator
-
-# Initialize with 10% base loss probability, TX-only
-sim = PacketLossSimulator(loss_probability=0.1, direction=PacketLossSimulator.DIRECTION_TX_ONLY)
-sim.enable()
-
-# Analyze a command queue into task groups
-speed_queue = [
-    {'x': 100, 'y': 0, 'angular': 0, 'duration': 1.0},   # Group 0: Forward
-    {'x': 100, 'y': 0, 'angular': 0, 'duration': 1.0},   # Group 0: Forward
-    {'x': 0, 'y': 50, 'angular': 0, 'duration': 2.0},    # Group 1: Left
-]
-sim.analyze_task_groups(speed_queue)
-
-# Enable queue loss mode for intelligent task-group dropping
-sim.enable_queue_loss_mode()
-
-# Optionally target specific groups for deterministic testing
-sim.enable_target_loss_mode(task_group_ids=[1], probability=1.0)
-
-# Or manually trigger a loss
-sim.trigger_manual_loss_for_task_group(1)
-
-# Simulate a transition between task groups
-is_lost, start_correction, reason = sim.simulate_queue_loss(
-    current_command=speed_queue[1],
-    next_command=speed_queue[2],
-    current_task_group=sim.task_groups[0],
-    next_task_group=sim.task_groups[1],
-    is_task_change=True,
-    gui_callback=None  # Set to a Tkinter callback for interactive mode
-)
-
-if is_lost:
-    print(f"Loss detected: {reason}")
-    if start_correction:
-        print("Initiating early correction...")
+```
+RemoteCarControl/
+├── carBS/                          # Base station control GUI (Python/Tkinter)
+│   ├── station_server.py
+│   ├── packet_loss_simulator.py
+│   └── ...
+├── carUE/                          # UE client (car side, Python)
+│   ├── ue_clientLX.py
+│   ├── can_driver.py
+│   └── ...
+├── docs/
+│   ├── images/                     # Project screenshots (car, GUI, etc.)
+│   │   ├── Base_Station_Interface.png
+│   │   ├── Base_Station_Correction.png
+│   │   ├── Local_Correction_Process.png
+│   │   ├── car_usrp.jpg      # ⬅️ Put your car+USRP photo here
+│   └── 5g/                         # 5G NR experiment records
+│       └── logs/
+│           ├── ue.log
+│           └── gnb.log
+├── README.md
+└── .git/
 ```
 
-### API Summary
+---
 
-| Method | Description |
-|--------|-------------|
-| `set_loss_probability(p)` | Set base loss probability (`0.0`–`1.0`). |
-| `set_direction(d)` | Set loss direction (`TX_ONLY`, `RX_ONLY`, `BOTH`). |
-| `enable()` / `disable()` | Toggle the simulator on/off. |
-| `analyze_task_groups(queue)` | Segment a speed queue into task groups. |
-| `enable_queue_loss_mode()` | Enable intelligent task-group loss at transitions. |
-| `enable_target_loss_mode(ids, p)` | Enable deterministic loss for specific task groups. |
-| `trigger_manual_loss_for_task_group(id)` | Force loss of a specific upcoming group. |
-| `simulate_queue_loss(...)` | Evaluate loss at a task transition point. |
-| `simulate_tx_loss(data)` / `simulate_rx_loss(data)` | Legacy per-packet loss simulation. |
-| `get_stats()` / `get_stats_text()` | Retrieve comprehensive statistics. |
-| `get_loss_history_text(n)` | Retrieve the last `n` loss events. |
-| `reset_stats()` | Clear all counters and history. |
+## 📎 References
+
+- [srsRAN Project Documentation](https://docs.srsran.com/)
+- [srsUE Source Tutorial](https://docs.srsran.com/projects/project/en/latest/tutorials/source/srsUE/source/index.html)
+- [Open5GS Open Source Core Network](https://open5gs.org/)
+- 3GPP TS 38.331 — NR; Radio Resource Control (RRC) protocol specification
 
 ---
