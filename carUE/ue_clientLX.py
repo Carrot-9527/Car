@@ -1008,7 +1008,7 @@ class UEClient:
 
                 if corrected_cmd:
                     vx = int(corrected_cmd.get('x_speed', 0))
-                    vy = -int(corrected_cmd.get('y_speed', 0))
+                    vy = int(corrected_cmd.get('y_speed', 0))
                     angular = int(corrected_cmd.get('angular_speed', 0))
 
                     self._send_can_command('motion', {
