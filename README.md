@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/29403961/README.md)
 # 🚗 Remote Car Control System over 5G NR
 
 > A TCP-based remote car control platform featuring **5G NR wireless communication** (srsRAN), **packet loss simulation**, **base station correction**, and **local correction** to ensure trajectory tracking accuracy in weak network environments.
