@@ -9,7 +9,7 @@
 ### System in Real World
 | Car + USRP B210 | 5G gNB / Core Network |
 
-| ![Car with USRP and 5G Base Station](docs/images/car_usrp.jpg) |
+| ![Car with USRP and 5G Base Station](docs/images/car_usrp.png) |
 
 ---
 
